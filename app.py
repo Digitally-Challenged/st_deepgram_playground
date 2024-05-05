@@ -21,10 +21,6 @@ st.set_page_config(
     page_icon="▶️",
     menu_items={
         "About": f"▶️ Deepgram API Playground v{__version__}  "
-        f"\nContact: [Siddhant Sadangi](mailto:siddhant.sadangi@gmail.com)",
-        "Report a Bug": "https://github.com/SiddhantSadangi/st_deepgram_playground/issues/new",
-        "Get help": None,
-    },
 )
 
 st.header("🎵➡️ 🔠 Deepgram STT API Playground", divider="violet")
