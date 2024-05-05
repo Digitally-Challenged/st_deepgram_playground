@@ -136,10 +136,6 @@ with st.sidebar:
 
         deepgram = DeepgramClient(deepgram_api_key)
 
-    # TODO: Add WebVTT/SRT captions (https://developers.deepgram.com/docs/automatically-generating-webvtt-and-srt-captions)
-    # TODO: Add find&replace, keywords, sample rate
-    # TODO: Better handling of disabled features (don't turn on by default)
-    # FIXME: Handle case when language is changed after unsupported feature is selected
     with st.expander("🦾 Features", expanded=True):
         detect_topics = st.checkbox(
             "Topic Detection",
@@ -249,11 +245,6 @@ with st.sidebar:
         else:
             utt_split = 0.8
 
-    with st.expander("📚 Deepgram Resources"):
-        st.write("📖 [Docs](https://developers.deepgram.com/docs)")
-        st.write("📟 [Dev Console](https://console.deepgram.com/)")
-        st.write("🤗 [Community Support](https://github.com/orgs/deepgram/discussions/)")
-
     with open("sidebar.html", "r", encoding="UTF-8") as sidebar_file:
         sidebar_html = sidebar_file.read().replace("{VERSION}", __version__)
 
@@ -267,35 +258,7 @@ with st.sidebar:
         </div>"""
     )
 
-    social_media_links = [
-        "https://www.facebook.com/sharer/sharer.php?kid_directed_site=0&sdk=joey&u=https%3A%2F%2Fdeepgram-playground.streamlit.app%2F&display=popup&ref=plugin&src=share_button",
-        "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fdeepgram-playground.streamlit.app%2F",
-        "https://x.com/intent/tweet?original_referer=https%3A%2F%2Fdeepgram-playground.streamlit.app%2F&ref_src=twsrc%5Etfw%7Ctwcamp%5Ebuttonembed%7Ctwterm%5Eshare%7Ctwgr%5E&text=Check%20out%20this%20feature-packed%20Speech-To-Text%20Streamlit%20app%21&url=https%3A%2F%2Fdeepgram-playground.streamlit.app%2F",
-    ]
-
-    social_media_icons = SocialMediaIcons(
-        social_media_links, colors=["lightgray"] * len(social_media_links)
-    )
-
-    social_media_icons.render(sidebar=True)
-
-    st.html(
-        """
-        <div style="text-align:center; font-size:12px; color:lightgrey">
-            <hr style="margin-bottom: 6%; margin-top: 6%;">
-            <a rel="license" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
-                <img alt="Creative Commons License" style="border-width:0"
-                    src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" />
-            </a><br><br>
-            This work is licensed under a <b>Creative Commons
-                Attribution-NonCommercial-ShareAlike 4.0 International License</b>.<br>
-            You can modify and build upon this work non-commercially. All derivatives should be
-            credited to Siddhant Sadangi and
-            be licenced under the same terms.
-        </div>
-    """
-    )
-
+    
 # TODO: Extract audio from video for all modes
 audio_source = st.radio(
     "Choose audio source",
