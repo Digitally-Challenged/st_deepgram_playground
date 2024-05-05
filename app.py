@@ -8,14 +8,10 @@ import streamlit as st
 from deepgram import (
     DeepgramClient,
     FileSource,
-    LiveOptions,
-    LiveTranscriptionEvents,
     PrerecordedOptions,
 )
-from pytube import YouTube
 from st_audiorec import st_audiorec
 from st_social_media_links import SocialMediaIcons
-from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 # Configs
 __version__ = "1.0.3"
@@ -51,113 +47,17 @@ LANGUAGES = {
     "Hindi": "hi",
 }
 
-
-@st.cache_data
-def _read_from_youtube(url: str) -> str:
-    yt = YouTube(url)
-
-    video = yt.streams.filter(only_audio=True).first()
-
-    out_file = video.download()
-    base, ext = os.path.splitext(out_file)
-    audio_file = f"{base}.mp3"
-
-    if os.path.isfile(audio_file):
-        os.remove(audio_file)
-    os.rename(out_file, audio_file)
-
-    return audio_file
-
-
-def streaming(url: str, options: LiveOptions):
-    try:
-        # Create a websocket connection to Deepgram
-        dg_connection = deepgram.listen.live.v("1")
-        ctx = get_script_run_ctx()
-
-        def on_open(self, open, **kwargs):
-            st.info(
-                "Use the 'Stop' button at the top right to stop transcription",
-                icon="⏹️",
-            )
-            st.info("Starting transcription...")
-
-        def on_message(self, result, **kwargs):
-            add_script_run_ctx(threading.current_thread(), ctx)
-            sentence = result.channel.alternatives[0].transcript
-            if len(sentence) > 0:
-                st.text(sentence)
-
-        def on_close(self, close, **kwargs):
-            st.warning("Stopping stream...")
-
-        dg_connection.on(LiveTranscriptionEvents.Open, on_open)
-        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
-        dg_connection.on(LiveTranscriptionEvents.Close, on_close)
-
-        if dg_connection.start(options) is False:
-            st.error("Failed to start connection")
-            return
-
-        lock_exit = threading.Lock()
-        exit = False
-
-        # define a worker thread
-        def myThread():
-            with httpx.stream("GET", url) as r:
-                for data in r.iter_bytes():
-                    lock_exit.acquire()
-                    if exit:
-                        break
-                    lock_exit.release()
-
-                    dg_connection.send(data)
-
-        # start the worker thread
-        myHttp = threading.Thread(target=myThread)
-        myHttp.start()
-
-        # signal finished
-        input("")
-        lock_exit.acquire()
-        exit = True
-        lock_exit.release()
-
-        # Wait for the HTTP thread to close and join
-        myHttp.join()
-
-        # Indicate that we've finished
-        dg_connection.finish()
-
-        st.success("Finished")
-
-    except Exception as e:
-        print(f"Could not open socket: {e}")
-        return
-
-
 @st.cache_data
 def prerecorded(source, options: PrerecordedOptions) -> None:
-    if audio_yt != "Audio URL":
-        payload: FileSource = {"buffer": source["buffer"]}
-        response = (
-            deepgram.listen.prerecorded.v("1")
-            .transcribe_file(
-                payload,
-                options,
-            )
-            .to_dict()
+    payload: FileSource = {"buffer": source["buffer"]}
+    response = (
+        deepgram.listen.prerecorded.v("1")
+        .transcribe_file(
+            payload,
+            options,
         )
-
-    else:
-        response = (
-            deepgram.listen.prerecorded.v("1")
-            .transcribe_url(
-                source,
-                options,
-            )
-            .to_dict()
-        )
+        .to_dict()
+    )
 
     # Write the response to the console
     if detected_language := response["results"]["channels"][0].get("detected_language", None):
@@ -192,16 +92,6 @@ def prerecorded(source, options: PrerecordedOptions) -> None:
 
 
 lcol, mcol, rcol = st.columns(3)
-audio_format = lcol.selectbox(
-    "️️️️️🗄️Format",
-    options=[
-        "Prerecorded",
-        "Streaming",
-    ],
-)
-
-if audio_format == "Streaming":
-    del LANGUAGES["Automatic Language Detection"]
 
 language = mcol.selectbox(
     "🔠 Language",
@@ -251,21 +141,10 @@ with st.sidebar:
     # TODO: Better handling of disabled features (don't turn on by default)
     # FIXME: Handle case when language is changed after unsupported feature is selected
     with st.expander("🦾 Features", expanded=True):
-        if channels := st.checkbox(
-            "Channels",
-            help="Specify the number of independent audio channels your submitted streaming audio contains",
-            value=audio_format == "Streaming",
-            disabled=audio_format != "Streaming",
-        ):
-            num_channels = st.number_input("Number of channels", min_value=1)
-        else:
-            num_channels = 1
-
         detect_topics = st.checkbox(
             "Topic Detection",
             help="Indicates whether Deepgram will identify and extract key topics for sections of content",
-            value=audio_format == "Prerecorded",
-            disabled=audio_format != "Prerecorded",
+            value=True,
         )
 
         diarize = st.checkbox(
@@ -277,30 +156,7 @@ with st.sidebar:
         detect_entities = st.checkbox(
             "Entity Detection",
             help="Indicates whether Deepgram will identify and extract key entities for sections of content",
-            value=audio_format == "Prerecorded",
-            disabled=audio_format != "Prerecorded",
-        )
-
-        encoding = st.selectbox(
-            "Encoding",
-            options=["linear16", "flac", "mulaw", "amr-nb", "amr-nb", "opus", "speex"],
-            help="Specify the expected encoding of the submitted streaming audio",
-            disabled=audio_format != "Streaming",
-        )
-
-        endpointing = st.checkbox(
-            "Endpointing",
-            help="Returns transcripts when pauses in speech are detected",
-            value=audio_format == "Streaming",
-            disabled=audio_format != "Streaming",
-        )
-
-        interim_results = st.checkbox(
-            "Interim results",
-            help="""Provides preliminary results for streaming audio to solve the need for immediate 
-            results combined with high levels of accuracy""",
-            value=False,
-            disabled=audio_format != "Streaming",
+            value=True,
         )
 
         multichannel = st.checkbox(
@@ -312,8 +168,7 @@ with st.sidebar:
             "Paragraphs",
             help="""Indicates whether Deepgram will split audio into paragraphs to improve transcript readability. 
             When paragraphs is set to true, punctuate will also be set to true""",
-            value=audio_format == "Prerecorded",
-            disabled=audio_format != "Prerecorded",
+            value=True,
         )
 
         profanity_filter = st.checkbox(
@@ -373,8 +228,7 @@ with st.sidebar:
             "Summarization",
             help="""Indicates whether Deepgram will provide summaries for sections of content. 
             When Summarization is enabled, Punctuation will also be enabled by default""",
-            value=audio_format == "Prerecorded",
-            disabled=audio_format != "Prerecorded",
+            value=True,
         )
 
         if utterances := st.checkbox(
@@ -382,8 +236,7 @@ with st.sidebar:
             help="""Segments speech into meaningful semantic units. 
                 By default, when utterances is enabled, it starts a new utterance after 0.8s of silence. 
                 You can customize the length of time used to determine where to split utterances with the utt_split parameter""",
-            value=audio_format == "Prerecorded",
-            disabled=audio_format != "Prerecorded",
+            value=True,
         ):
             utt_split = st.number_input(
                 "Utterance split",
@@ -443,151 +296,61 @@ with st.sidebar:
     """
     )
 
+# TODO: Extract audio from video for all modes
+audio_source = st.radio(
+    "Choose audio source",
+    options=[
+        "🎶 Pick a sample file",
+        "️🗣 Record audio️",
+        "⬆️ Upload audio file",
+    ],
+    horizontal=True,
+)
 
-if audio_format == "Streaming":
-    url = st.text_input(
-        "Streaming audio URL",
-        key="url",
-        value="http://stream.live.vc.bbcmedia.co.uk/bbc_world_service",
+if audio_source == "⬆️ Upload audio file":
+    st.session_state["audio"] = st.file_uploader(
+        label="⬆️ Upload audio file",
+        label_visibility="collapsed",
+    )
+    st.session_state["mimetype"] = (
+        st.session_state["audio"].type if st.session_state["audio"] else None
     )
 
-    options = LiveOptions(
-        model=MODELS[model],
-        channels=num_channels,
-        diarize=diarize,
-        encoding=encoding,
-        endpointing=endpointing,
-        interim_results=interim_results,
-        multichannel=multichannel,
-        profanity_filter=profanity_filter,
-        punctuate=punctuate,
-        redact=[option for option in redact_options if option],
-        search=f"""[{search_terms or ""}]""",
-        smart_format=smart_format,
-    )
+elif audio_source == "️🗣 Record audio️":
+    st.session_state["audio"] = st_audiorec()
 
-elif audio_format == "Prerecorded":
-    # TODO: Extract audio from video for all modes
-    audio_source = st.radio(
-        "Choose audio source",
-        options=[
-            "🎶 Pick a sample file",
-            "️🗣 Record audio️",
-            "⬆️ Upload audio file",
-            "🌐 Load from URL",
-        ],
-        horizontal=True,
-    )
+else:
+    st.session_state["audio"] = "assets/sample_file.wav"
 
-    audio_yt = None
+if st.session_state["audio"] and audio_source != "️🗣 Record audio️":
+    st.audio(st.session_state["audio"])
 
-    if audio_source == "⬆️ Upload audio file":
-        st.session_state["audio"] = st.file_uploader(
-            label="⬆️ Upload audio file",
-            label_visibility="collapsed",
-        )
-        st.session_state["mimetype"] = (
-            st.session_state["audio"].type if st.session_state["audio"] else None
-        )
+options = PrerecordedOptions(
+    model=MODELS[model],
+    detect_topics=detect_topics,
+    diarize=diarize,
+    detect_entities=detect_entities,
+    multichannel=multichannel,
+    paragraphs=paragraphs,
+    profanity_filter=profanity_filter,
+    punctuate=punctuate,
+    redact=[option for option in redact_options if option],
+    smart_format=smart_format,
+    summarize=summarize,
+    search=f"""[{search_terms or ""}]""",
+    utterances=utterances,
+    utt_split=utt_split,
+)
 
-    elif audio_source == "🌐 Load from URL":
-        audio_yt = st.radio(
-            "Source type",
-            options=["Audio URL", "Youtube link"],
-            horizontal=True,
-            label_visibility="collapsed",
-        )
-        url = st.text_input(
-            "URL",
-            key="url",
-            value=(
-                "https://static.deepgram.com/examples/Bueller-Life-moves-pretty-fast.wav"
-                if audio_yt == "Audio URL"
-                else "https://www.youtube.com/watch?v=qHrN5Mf5sgo"
-            ),
-        )
-
-        if url != "":
-            try:
-                if audio_yt == "Audio URL":
-                    st.session_state["audio"] = url
-                else:
-                    st.session_state["audio"] = _read_from_youtube(url)
-            except Exception as e:
-                st.error(e)
-
-    elif audio_source == "️🗣 Record audio️":
-        st.session_state["audio"] = st_audiorec()
-
-    else:
-        st.session_state["audio"] = "assets/sample_file.wav"
-
-    if st.session_state["audio"] and audio_source != "️🗣 Record audio️":
-        if audio_source == "🌐 Load from URL" and audio_yt == "Youtube link":
-            st.video(url)
-        else:
-            st.audio(st.session_state["audio"])
-
-    options = PrerecordedOptions(
-        model=MODELS[model],
-        channels=num_channels,
-        detect_topics=detect_topics,
-        diarize=diarize,
-        detect_entities=detect_entities,
-        encoding=encoding,
-        multichannel=multichannel,
-        paragraphs=paragraphs,
-        profanity_filter=profanity_filter,
-        punctuate=punctuate,
-        redact=[option for option in redact_options if option],
-        smart_format=smart_format,
-        summarize=summarize,
-        search=f"""[{search_terms or ""}]""",
-        utterances=utterances,
-        utt_split=utt_split,
-    )
-
-if audio_format == "Prerecorded":
-    # Check whether requested file is local, uploaded or remote, and prepare source
-    if audio_source == "🌐 Load from URL":
-        # file is remote
-        if audio_yt == "Audio URL":
-            source = {"url": url}
-        else:
-            source = {"buffer": open(st.session_state["audio"], "rb")}
-    elif audio_source in (["⬆️ Upload audio file", "️🗣 Record audio️"]):
-        # file is uploaded/recorded
-        source = {
-            "buffer": st.session_state["audio"],
-        }
-    else:
-        # file is local
-        source = {"buffer": open(st.session_state["audio"], "rb").read()}
-
-# TODO: Update for v3
-# Write code
-#     with st.expander("🧑‍💻 Request preview", expanded=False):
-#         st.code(
-# f"""
-# from deepgram import DeepgramClient, PrerecordedOptions
-
-# deepgram = DeepgramClient(DEEPGRAM_API_KEY)
-
-# payload = dict(buffer={source["buffer"] if type(source["buffer"])=="str" else "AUDIO_BUFFER"})
-
-# response = (
-#     deepgram.listen.prerecorded.v("1")
-#     .transcribe_file(
-#         payload,
-#         options,
-#     )
-#     .to_dict()
-# )
-# """
-# )
-# else:
-#     # TODO: Show code for Streaming input
-#     pass
+# Check whether requested file is local, uploaded or remote, and prepare source
+if audio_source in (["⬆️ Upload audio file", "️🗣 Record audio️"]):
+    # file is uploaded/recorded
+    source = {
+        "buffer": st.session_state["audio"],
+    }
+else:
+    # file is local
+    source = {"buffer": open(st.session_state["audio"], "rb").read()}
 
 if st.button(
     "🪄 Transcribe",
@@ -597,10 +360,7 @@ if st.button(
     help="" if deepgram_api_key else "Enter your Deepgram API key",
 ):
     try:
-        if audio_format == "Streaming":
-            streaming(url, options)
-        else:
-            prerecorded(source, options)
+        prerecorded(source, options)
     except Exception as e:
         if str(e).endswith("timed out"):
             st.error(
