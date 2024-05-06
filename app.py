@@ -20,7 +20,7 @@ st.set_page_config(
     page_title="Deepgram API Playground",
     page_icon="▶️",
     menu_items={
-        "About": f"▶️ Deepgram API Playground v{__version__}  "
+        "About": f"▶️ Deepgram API Playground v{__version__}  "}
 )
 
 st.header("🎵➡️ 🔠 Deepgram STT API Playground", divider="violet")
